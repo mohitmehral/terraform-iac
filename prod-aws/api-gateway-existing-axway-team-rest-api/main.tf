@@ -12,18 +12,18 @@ provider "aws" { region = "us-east-1" }
 
 locals {
   tags = {
-    ManagedBy   = "terraform"
-    CreatedBy   = "openclaw"
-    Environment = "prod"
-    Name        = "existing-axway-team-rest-api"
+    ManagedBy        = "terraform"
+    CreatedBy        = "openclaw"
+    Environment      = "prod"
+    Name             = "axway-team-api"
     PortalVisibility = "internal"
-    PortalProduct = "private"
+    PortalProduct    = "private"
   }
 }
 
 # ─── IAM Role for API Gateway CloudWatch Logging ───────────────────────────
 resource "aws_iam_role" "apigw_cloudwatch" {
-  name = "existing-axway-team-rest-api-apigw-cw-role"
+  name = "axway-team-api-apigw-cw-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -46,15 +46,15 @@ resource "aws_api_gateway_account" "this" {
 
 # ─── CloudWatch Log Group ──────────────────────────────────────────────────
 resource "aws_cloudwatch_log_group" "apigw" {
-  name              = "/aws/apigateway/existing-axway-team-rest-api"
+  name              = "/aws/apigateway/axway-team-api"
   retention_in_days = 30
   tags              = local.tags
 }
 
 # ─── REST API ──────────────────────────────────────────────────────────────
 resource "aws_api_gateway_rest_api" "this" {
-  name        = "existing-axway-team-rest-api"
-  description = "existing-axway-team-rest-api REST API managed by OpenClaw"
+  name        = "axway-team-api"
+  description = "axway-team-api REST API managed by OpenClaw"
   tags        = local.tags
 
   endpoint_configuration {
@@ -64,7 +64,7 @@ resource "aws_api_gateway_rest_api" "this" {
 
 # ─── Client Certificate ────────────────────────────────────────────────────
 resource "aws_api_gateway_client_certificate" "this" {
-  description = "Client certificate for existing-axway-team-rest-api stage prod"
+  description = "Client certificate for axway-team-api stage prod"
   tags        = local.tags
 }
 
@@ -167,8 +167,8 @@ resource "aws_api_gateway_method_settings" "all" {
 
 # ─── Usage Plan + API Key ──────────────────────────────────────────────────
 resource "aws_api_gateway_usage_plan" "this" {
-  name        = "existing-axway-team-rest-api-usage-plan"
-  description = "Usage plan for existing-axway-team-rest-api"
+  name        = "axway-team-api-usage-plan"
+  description = "Usage plan for axway-team-api"
 
   api_stages {
     api_id = aws_api_gateway_rest_api.this.id
@@ -184,7 +184,7 @@ resource "aws_api_gateway_usage_plan" "this" {
 }
 
 resource "aws_api_gateway_api_key" "this" {
-  name    = "existing-axway-team-rest-api-key"
+  name    = "axway-team-api-key"
   enabled = true
   tags    = local.tags
 }

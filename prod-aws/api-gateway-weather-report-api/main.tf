@@ -12,12 +12,12 @@ provider "aws" { region = "us-east-1" }
 
 locals {
   tags = {
-    ManagedBy   = "terraform"
-    CreatedBy   = "openclaw"
-    Environment = "prod"
-    Name        = "weather-report-api"
+    ManagedBy        = "terraform"
+    CreatedBy        = "openclaw"
+    Environment      = "prod"
+    Name             = "weather-report-api"
     PortalVisibility = "internal"
-    PortalProduct = "private"
+    PortalProduct    = "private"
   }
 }
 
@@ -68,59 +68,70 @@ resource "aws_api_gateway_client_certificate" "this" {
   tags        = local.tags
 }
 
-# ─── Resource + Method (MOCK — TODO: replace with real integration) ────────
-resource "aws_api_gateway_resource" "items" {
+# ─── Weather Resource + Method ─────────────────────────────────────────────
+resource "aws_api_gateway_resource" "weather" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = "items"
+  path_part   = "weather"
 }
 
-resource "aws_api_gateway_method" "items_get" {
+resource "aws_api_gateway_method" "weather_get" {
   rest_api_id      = aws_api_gateway_rest_api.this.id
-  resource_id      = aws_api_gateway_resource.items.id
+  resource_id      = aws_api_gateway_resource.weather.id
   http_method      = "GET"
   authorization    = "NONE"
-  api_key_required = true  # API key enforced by default
+  api_key_required = true
+  request_parameters = {
+    "method.request.querystring.postcode"    = true
+    "method.request.querystring.country_code" = true
+  }
 }
 
-resource "aws_api_gateway_integration" "items_get" {
+resource "aws_api_gateway_integration" "weather_get" {
   rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.items.id
-  http_method = aws_api_gateway_method.items_get.http_method
+  resource_id = aws_api_gateway_resource.weather.id
+  http_method = aws_api_gateway_method.weather_get.http_method
   type        = "MOCK"
 
   request_templates = {
-    "application/json" = jsonencode({ statusCode = 200 })
+    "application/json" = <<-EOT
+      {"statusCode": 200}
+    EOT
   }
 }
 
-resource "aws_api_gateway_method_response" "items_get_200" {
+resource "aws_api_gateway_method_response" "weather_get_200" {
   rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.items.id
-  http_method = aws_api_gateway_method.items_get.http_method
+  resource_id = aws_api_gateway_resource.weather.id
+  http_method = aws_api_gateway_method.weather_get.http_method
   status_code = "200"
 }
 
-resource "aws_api_gateway_integration_response" "items_get_200" {
+resource "aws_api_gateway_integration_response" "weather_get_200" {
   rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.items.id
-  http_method = aws_api_gateway_method.items_get.http_method
-  status_code = aws_api_gateway_method_response.items_get_200.status_code
+  resource_id = aws_api_gateway_resource.weather.id
+  http_method = aws_api_gateway_method.weather_get.http_method
+  status_code = aws_api_gateway_method_response.weather_get_200.status_code
 
   response_templates = {
-    "application/json" = jsonencode({ message = "TODO: connect real backend" })
+    "application/json" = <<-EOT
+      {
+        "postcode": "$input.params('postcode')",
+        "country_code": "$input.params('country_code')",
+        "weather_report": "TODO: connect weather backend"
+      }
+    EOT
   }
 }
 
-# ─── Deployment + Stage ────────────────────────────────────────────────────
 resource "aws_api_gateway_deployment" "this" {
   rest_api_id = aws_api_gateway_rest_api.this.id
 
   triggers = {
     redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.items.id,
-      aws_api_gateway_method.items_get.id,
-      aws_api_gateway_integration.items_get.id,
+      aws_api_gateway_resource.weather.id,
+      aws_api_gateway_method.weather_get.id,
+      aws_api_gateway_integration.weather_get.id,
     ]))
   }
 
@@ -165,7 +176,6 @@ resource "aws_api_gateway_method_settings" "all" {
   }
 }
 
-# ─── Usage Plan + API Key ──────────────────────────────────────────────────
 resource "aws_api_gateway_usage_plan" "this" {
   name        = "weather-report-api-usage-plan"
   description = "Usage plan for weather-report-api"
@@ -219,6 +229,10 @@ output "client_certificate_id" {
 
 output "cloudwatch_log_group" {
   value = aws_cloudwatch_log_group.apigw.name
+}
+
+output "weather_resource_path" {
+  value = "/weather"
 }
 
 output "usage_plan_id" {

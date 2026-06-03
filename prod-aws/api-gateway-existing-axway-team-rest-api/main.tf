@@ -15,7 +15,7 @@ locals {
     ManagedBy   = "terraform"
     CreatedBy   = "openclaw"
     Environment = "prod"
-    Name        = "axway-team-api"
+    Name        = "existing-axway-team-rest-api"
     PortalVisibility = "internal"
     PortalProduct = "private"
   }
@@ -23,7 +23,7 @@ locals {
 
 # ─── IAM Role for API Gateway CloudWatch Logging ───────────────────────────
 resource "aws_iam_role" "apigw_cloudwatch" {
-  name = "axway-team-api-apigw-cw-role"
+  name = "existing-axway-team-rest-api-apigw-cw-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -46,15 +46,15 @@ resource "aws_api_gateway_account" "this" {
 
 # ─── CloudWatch Log Group ──────────────────────────────────────────────────
 resource "aws_cloudwatch_log_group" "apigw" {
-  name              = "/aws/apigateway/axway-team-api"
+  name              = "/aws/apigateway/existing-axway-team-rest-api"
   retention_in_days = 30
   tags              = local.tags
 }
 
 # ─── REST API ──────────────────────────────────────────────────────────────
 resource "aws_api_gateway_rest_api" "this" {
-  name        = "axway-team-api"
-  description = "axway-team-api REST API managed by OpenClaw"
+  name        = "existing-axway-team-rest-api"
+  description = "existing-axway-team-rest-api REST API managed by OpenClaw"
   tags        = local.tags
 
   endpoint_configuration {
@@ -63,6 +63,11 @@ resource "aws_api_gateway_rest_api" "this" {
 }
 
 # ─── Client Certificate ────────────────────────────────────────────────────
+resource "aws_api_gateway_client_certificate" "this" {
+  description = "Client certificate for existing-axway-team-rest-api stage prod"
+  tags        = local.tags
+}
+
 # ─── Resource + Method (MOCK — TODO: replace with real integration) ────────
 resource "aws_api_gateway_resource" "items" {
   rest_api_id = aws_api_gateway_rest_api.this.id
@@ -74,33 +79,8 @@ resource "aws_api_gateway_method" "items_get" {
   rest_api_id      = aws_api_gateway_rest_api.this.id
   resource_id      = aws_api_gateway_resource.items.id
   http_method      = "GET"
-  authorization    = "COGNITO_USER_POOLS"
-  authorizer_id    = aws_api_gateway_authorizer.cognito.id
-  api_key_required = false
-}
-
-resource "aws_api_gateway_authorizer" "cognito" {
-  name          = "axway-team-api-cognito-authorizer"
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  type          = "COGNITO_USER_POOLS"
-  provider_arns = [aws_cognito_user_pool.axway.arn]
-}
-
-resource "aws_cognito_user_pool" "axway" {
-  name = "axway-team-api-user-pool"
-  tags = local.tags
-}
-
-resource "aws_cognito_user_pool_client" "axway" {
-  name         = "axway-team-api-client"
-  user_pool_id = aws_cognito_user_pool.axway.id
-
-  generate_secret = false
-  explicit_auth_flows = [
-    "ALLOW_USER_SRP_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH",
-    "ALLOW_USER_PASSWORD_AUTH",
-  ]
+  authorization    = "NONE"
+  api_key_required = true  # API key enforced by default
 }
 
 resource "aws_api_gateway_integration" "items_get" {
@@ -128,18 +108,7 @@ resource "aws_api_gateway_integration_response" "items_get_200" {
   status_code = aws_api_gateway_method_response.items_get_200.status_code
 
   response_templates = {
-    "application/json" = <<-EOT
-    {
-      "message": "TODO: connect real backend",
-      "requestHeaders": $input.json('$input.params().header'),
-      "apiVersion": {
-        "api": "axway-team-api",
-        "stage": "$context.stage",
-        "resource": "/axway/items",
-        "method": "$context.httpMethod"
-      }
-    }
-    EOT
+    "application/json" = jsonencode({ message = "TODO: connect real backend" })
   }
 }
 
@@ -159,9 +128,10 @@ resource "aws_api_gateway_deployment" "this" {
 }
 
 resource "aws_api_gateway_stage" "prod" {
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  deployment_id = aws_api_gateway_deployment.this.id
-  stage_name    = "prod"
+  rest_api_id           = aws_api_gateway_rest_api.this.id
+  deployment_id         = aws_api_gateway_deployment.this.id
+  stage_name            = "prod"
+  client_certificate_id = aws_api_gateway_client_certificate.this.id
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.apigw.arn
@@ -197,8 +167,8 @@ resource "aws_api_gateway_method_settings" "all" {
 
 # ─── Usage Plan + API Key ──────────────────────────────────────────────────
 resource "aws_api_gateway_usage_plan" "this" {
-  name        = "axway-team-api-usage-plan"
-  description = "Usage plan for axway-team-api"
+  name        = "existing-axway-team-rest-api-usage-plan"
+  description = "Usage plan for existing-axway-team-rest-api"
 
   api_stages {
     api_id = aws_api_gateway_rest_api.this.id
@@ -214,7 +184,7 @@ resource "aws_api_gateway_usage_plan" "this" {
 }
 
 resource "aws_api_gateway_api_key" "this" {
-  name    = "axway-team-api-key"
+  name    = "existing-axway-team-rest-api-key"
   enabled = true
   tags    = local.tags
 }
@@ -243,12 +213,8 @@ output "api_key_value" {
   sensitive = true
 }
 
-output "cognito_user_pool_id" {
-  value = aws_cognito_user_pool.axway.id
-}
-
-output "cognito_user_pool_client_id" {
-  value = aws_cognito_user_pool_client.axway.id
+output "client_certificate_id" {
+  value = aws_api_gateway_client_certificate.this.id
 }
 
 output "cloudwatch_log_group" {

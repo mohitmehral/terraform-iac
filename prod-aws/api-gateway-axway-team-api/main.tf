@@ -63,11 +63,6 @@ resource "aws_api_gateway_rest_api" "this" {
 }
 
 # ─── Client Certificate ────────────────────────────────────────────────────
-resource "aws_api_gateway_client_certificate" "this" {
-  description = "Client certificate for axway-team-api stage prod"
-  tags        = local.tags
-}
-
 # ─── Resource + Method (MOCK — TODO: replace with real integration) ────────
 resource "aws_api_gateway_resource" "items" {
   rest_api_id = aws_api_gateway_rest_api.this.id
@@ -79,8 +74,33 @@ resource "aws_api_gateway_method" "items_get" {
   rest_api_id      = aws_api_gateway_rest_api.this.id
   resource_id      = aws_api_gateway_resource.items.id
   http_method      = "GET"
-  authorization    = "NONE"
-  api_key_required = true  # API key enforced by default
+  authorization    = "COGNITO_USER_POOLS"
+  authorizer_id    = aws_api_gateway_authorizer.cognito.id
+  api_key_required = false
+}
+
+resource "aws_api_gateway_authorizer" "cognito" {
+  name          = "axway-team-api-cognito-authorizer"
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  type          = "COGNITO_USER_POOLS"
+  provider_arns = [aws_cognito_user_pool.axway.arn]
+}
+
+resource "aws_cognito_user_pool" "axway" {
+  name = "axway-team-api-user-pool"
+  tags = local.tags
+}
+
+resource "aws_cognito_user_pool_client" "axway" {
+  name         = "axway-team-api-client"
+  user_pool_id = aws_cognito_user_pool.axway.id
+
+  generate_secret = false
+  explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH",
+  ]
 }
 
 resource "aws_api_gateway_integration" "items_get" {
@@ -108,7 +128,18 @@ resource "aws_api_gateway_integration_response" "items_get_200" {
   status_code = aws_api_gateway_method_response.items_get_200.status_code
 
   response_templates = {
-    "application/json" = jsonencode({ message = "TODO: connect real backend" })
+    "application/json" = <<-EOT
+    {
+      "message": "TODO: connect real backend",
+      "requestHeaders": $input.json('$input.params().header'),
+      "apiVersion": {
+        "api": "axway-team-api",
+        "stage": "$context.stage",
+        "resource": "/axway/items",
+        "method": "$context.httpMethod"
+      }
+    }
+    EOT
   }
 }
 
@@ -128,10 +159,9 @@ resource "aws_api_gateway_deployment" "this" {
 }
 
 resource "aws_api_gateway_stage" "prod" {
-  rest_api_id           = aws_api_gateway_rest_api.this.id
-  deployment_id         = aws_api_gateway_deployment.this.id
-  stage_name            = "prod"
-  client_certificate_id = aws_api_gateway_client_certificate.this.id
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  deployment_id = aws_api_gateway_deployment.this.id
+  stage_name    = "prod"
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.apigw.arn
@@ -213,8 +243,12 @@ output "api_key_value" {
   sensitive = true
 }
 
-output "client_certificate_id" {
-  value = aws_api_gateway_client_certificate.this.id
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.axway.id
+}
+
+output "cognito_user_pool_client_id" {
+  value = aws_cognito_user_pool_client.axway.id
 }
 
 output "cloudwatch_log_group" {

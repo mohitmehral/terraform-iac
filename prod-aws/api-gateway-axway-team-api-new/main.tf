@@ -12,47 +12,16 @@ provider "aws" { region = "us-east-1" }
 
 locals {
   tags = {
-    ManagedBy   = "terraform"
-    CreatedBy   = "openclaw"
-    Environment = "prod"
-    Name        = "axway-team-api-new"
+    ManagedBy        = "terraform"
+    CreatedBy        = "openclaw"
+    Environment      = "prod"
+    Name             = "axway-team-api-new"
     PortalVisibility = "internal"
-    PortalProduct = "private"
+    PortalProduct    = "private"
   }
 }
 
-# ─── IAM Role for API Gateway CloudWatch Logging ───────────────────────────
-resource "aws_iam_role" "apigw_cloudwatch" {
-  name = "axway-team-api-new-apigw-cw-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "apigateway.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-  tags = local.tags
-}
-
-resource "aws_iam_role_policy_attachment" "apigw_cloudwatch" {
-  role       = aws_iam_role.apigw_cloudwatch.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
-}
-
-resource "aws_api_gateway_account" "this" {
-  cloudwatch_role_arn = aws_iam_role.apigw_cloudwatch.arn
-}
-
-# ─── CloudWatch Log Group ──────────────────────────────────────────────────
-resource "aws_cloudwatch_log_group" "apigw" {
-  name              = "/aws/apigateway/axway-team-api-new"
-  retention_in_days = 30
-  tags              = local.tags
-}
-
-# ─── REST API ──────────────────────────────────────────────────────────────
-resource "aws_api_gateway_rest_api" "this" {
+resource "aws_api_gateway_rest_api" "new_api" {
   name        = "axway-team-api-new"
   description = "axway-team-api-new REST API managed by OpenClaw"
   tags        = local.tags
@@ -62,31 +31,24 @@ resource "aws_api_gateway_rest_api" "this" {
   }
 }
 
-# ─── Client Certificate ────────────────────────────────────────────────────
-resource "aws_api_gateway_client_certificate" "this" {
-  description = "Client certificate for axway-team-api-new stage prod"
-  tags        = local.tags
-}
-
-# ─── Resource + Method (MOCK — TODO: replace with real integration) ────────
-resource "aws_api_gateway_resource" "items" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+resource "aws_api_gateway_resource" "new_items" {
+  rest_api_id = aws_api_gateway_rest_api.new_api.id
+  parent_id   = aws_api_gateway_rest_api.new_api.root_resource_id
   path_part   = "items"
 }
 
-resource "aws_api_gateway_method" "items_get" {
-  rest_api_id      = aws_api_gateway_rest_api.this.id
-  resource_id      = aws_api_gateway_resource.items.id
+resource "aws_api_gateway_method" "new_items_get" {
+  rest_api_id      = aws_api_gateway_rest_api.new_api.id
+  resource_id      = aws_api_gateway_resource.new_items.id
   http_method      = "GET"
   authorization    = "NONE"
-  api_key_required = true  # API key enforced by default
+  api_key_required = true
 }
 
-resource "aws_api_gateway_integration" "items_get" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.items.id
-  http_method = aws_api_gateway_method.items_get.http_method
+resource "aws_api_gateway_integration" "new_items_get" {
+  rest_api_id = aws_api_gateway_rest_api.new_api.id
+  resource_id = aws_api_gateway_resource.new_items.id
+  http_method = aws_api_gateway_method.new_items_get.http_method
   type        = "MOCK"
 
   request_templates = {
@@ -94,85 +56,53 @@ resource "aws_api_gateway_integration" "items_get" {
   }
 }
 
-resource "aws_api_gateway_method_response" "items_get_200" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.items.id
-  http_method = aws_api_gateway_method.items_get.http_method
+resource "aws_api_gateway_method_response" "new_items_get_200" {
+  rest_api_id = aws_api_gateway_rest_api.new_api.id
+  resource_id = aws_api_gateway_resource.new_items.id
+  http_method = aws_api_gateway_method.new_items_get.http_method
   status_code = "200"
 }
 
-resource "aws_api_gateway_integration_response" "items_get_200" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.items.id
-  http_method = aws_api_gateway_method.items_get.http_method
-  status_code = aws_api_gateway_method_response.items_get_200.status_code
+resource "aws_api_gateway_integration_response" "new_items_get_200" {
+  rest_api_id = aws_api_gateway_rest_api.new_api.id
+  resource_id = aws_api_gateway_resource.new_items.id
+  http_method = aws_api_gateway_method.new_items_get.http_method
+  status_code = aws_api_gateway_method_response.new_items_get_200.status_code
 
   response_templates = {
     "application/json" = jsonencode({ message = "TODO: connect real backend" })
   }
 }
 
-# ─── Deployment + Stage ────────────────────────────────────────────────────
-resource "aws_api_gateway_deployment" "this" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
+resource "aws_api_gateway_deployment" "new_api" {
+  rest_api_id = aws_api_gateway_rest_api.new_api.id
 
   triggers = {
     redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.items.id,
-      aws_api_gateway_method.items_get.id,
-      aws_api_gateway_integration.items_get.id,
+      aws_api_gateway_resource.new_items.id,
+      aws_api_gateway_method.new_items_get.id,
+      aws_api_gateway_integration.new_items_get.id,
     ]))
   }
 
   lifecycle { create_before_destroy = true }
 }
 
-resource "aws_api_gateway_stage" "prod" {
-  rest_api_id           = aws_api_gateway_rest_api.this.id
-  deployment_id         = aws_api_gateway_deployment.this.id
-  stage_name            = "prod"
-  client_certificate_id = aws_api_gateway_client_certificate.this.id
+resource "aws_api_gateway_stage" "new_api_prod" {
+  rest_api_id   = aws_api_gateway_rest_api.new_api.id
+  deployment_id = aws_api_gateway_deployment.new_api.id
+  stage_name    = "prod"
 
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.apigw.arn
-    format         = jsonencode({
-      requestId      = "$context.requestId"
-      ip             = "$context.identity.sourceIp"
-      caller         = "$context.identity.caller"
-      user           = "$context.identity.user"
-      requestTime    = "$context.requestTime"
-      httpMethod     = "$context.httpMethod"
-      resourcePath   = "$context.resourcePath"
-      status         = "$context.status"
-      protocol       = "$context.protocol"
-      responseLength = "$context.responseLength"
-    })
-  }
-
-  depends_on = [aws_api_gateway_account.this]
-  tags       = local.tags
+  tags = local.tags
 }
 
-resource "aws_api_gateway_method_settings" "all" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  stage_name  = aws_api_gateway_stage.prod.stage_name
-  method_path = "*/*"
-
-  settings {
-    logging_level      = "INFO"
-    metrics_enabled    = true
-    data_trace_enabled = true
-  }
-}
-
-# ─── Usage Plan + API Key ──────────────────────────────────────────────────
-resource "aws_api_gateway_usage_plan" "this" {
+resource "aws_api_gateway_usage_plan" "new_api" {
   name        = "axway-team-api-new-usage-plan"
   description = "Usage plan for axway-team-api-new"
 
   api_stages {
-    api_id = aws_api_gateway_rest_api.this.id
-    stage  = aws_api_gateway_stage.prod.stage_name
+    api_id = aws_api_gateway_rest_api.new_api.id
+    stage  = aws_api_gateway_stage.new_api_prod.stage_name
   }
 
   throttle_settings {
@@ -183,44 +113,35 @@ resource "aws_api_gateway_usage_plan" "this" {
   tags = local.tags
 }
 
-resource "aws_api_gateway_api_key" "this" {
+resource "aws_api_gateway_api_key" "new_api" {
   name    = "axway-team-api-new-key"
   enabled = true
   tags    = local.tags
 }
 
-resource "aws_api_gateway_usage_plan_key" "this" {
-  key_id        = aws_api_gateway_api_key.this.id
+resource "aws_api_gateway_usage_plan_key" "new_api" {
+  key_id        = aws_api_gateway_api_key.new_api.id
   key_type      = "API_KEY"
-  usage_plan_id = aws_api_gateway_usage_plan.this.id
+  usage_plan_id = aws_api_gateway_usage_plan.new_api.id
 }
 
-# ─── Outputs ───────────────────────────────────────────────────────────────
-output "api_id" {
-  value = aws_api_gateway_rest_api.this.id
+output "new_api_id" {
+  value = aws_api_gateway_rest_api.new_api.id
 }
 
-output "api_invoke_url" {
-  value = aws_api_gateway_stage.prod.invoke_url
+output "new_api_invoke_url" {
+  value = aws_api_gateway_stage.new_api_prod.invoke_url
 }
 
-output "api_key_id" {
-  value = aws_api_gateway_api_key.this.id
+output "new_api_key_id" {
+  value = aws_api_gateway_api_key.new_api.id
 }
 
-output "api_key_value" {
-  value     = aws_api_gateway_api_key.this.value
+output "new_api_key_value" {
+  value     = aws_api_gateway_api_key.new_api.value
   sensitive = true
 }
 
-output "client_certificate_id" {
-  value = aws_api_gateway_client_certificate.this.id
-}
-
-output "cloudwatch_log_group" {
-  value = aws_cloudwatch_log_group.apigw.name
-}
-
-output "usage_plan_id" {
-  value = aws_api_gateway_usage_plan.this.id
+output "new_api_usage_plan_id" {
+  value = aws_api_gateway_usage_plan.new_api.id
 }

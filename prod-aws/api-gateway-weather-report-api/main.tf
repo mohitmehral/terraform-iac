@@ -8,6 +8,7 @@ terraform {
   }
 }
 
+# (removed duplicate definitions after accidental merge)
 provider "aws" { region = "us-east-1" }
 
 locals {
